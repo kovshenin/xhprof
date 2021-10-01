@@ -1301,18 +1301,45 @@ zend_string *hp_pcre_replace(zend_string *pattern, zend_string *repl, zval *data
     return replace;
 }
 
+zend_string *hp_trace_callback_apply_filters(zend_string *function_name, zend_execute_data *data)
+{
+	zend_string *trace_name;
+	zval *arg = ZEND_CALL_ARG(data, 1);
+	if (Z_TYPE_P(arg) != IS_STRING) {
+		return function_name;
+	}
+	trace_name = strpprintf(0, "%s#%s", ZSTR_VAL(function_name), Z_STRVAL_P(arg));
+	return trace_name;
+}
+
+zend_string *hp_trace_callback_closure(zend_string *function_name, zend_execute_data *data)
+{
+	zend_string *trace_name;
+	uint32_t line_start;
+
+	line_start = data->func->op_array.line_start;
+
+	trace_name = strpprintf(0, "%s#%s:%d", ZSTR_VAL(function_name),
+		ZSTR_VAL(data->func->op_array.filename), line_start);
+	return trace_name;
+}
+
 zend_string *hp_trace_callback_sql_query(zend_string *function_name, zend_execute_data *data)
 {
     zend_string *trace_name;
+    zval *arg;
 
     if (strcmp(ZSTR_VAL(function_name), "mysqli_query") == 0) {
-        zval *arg = ZEND_CALL_ARG(data, 2);
-        trace_name = strpprintf(0, "%s#%s", ZSTR_VAL(function_name), Z_STRVAL_P(arg));
+        arg = ZEND_CALL_ARG(data, 2);
     } else {
-        zval *arg = ZEND_CALL_ARG(data, 1);
-        trace_name = strpprintf(0, "%s#%s", ZSTR_VAL(function_name), Z_STRVAL_P(arg));
+        arg = ZEND_CALL_ARG(data, 1);
     }
 
+    if (Z_TYPE_P(arg) != IS_STRING) {
+        return function_name;
+    }
+
+    trace_name = strpprintf(0, "%s#%s", ZSTR_VAL(function_name), Z_STRVAL_P(arg));
     return trace_name;
 }
 
@@ -1482,4 +1509,11 @@ void hp_init_trace_callbacks()
 
     callback = hp_trace_callback_curl_exec;
     register_trace_callback("curl_exec", callback);
+
+    callback = hp_trace_callback_apply_filters;
+    register_trace_callback("apply_filters", callback);
+    register_trace_callback("do_action", callback);
+
+    callback = hp_trace_callback_closure;
+    register_trace_callback("{closure}", callback);
 }
