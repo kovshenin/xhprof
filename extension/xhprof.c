@@ -286,7 +286,7 @@ PHP_MINIT_FUNCTION(xhprof)
 #endif
 
 #ifdef ZEND_WIN32
-    QueryPerformanceFrequency(&performance_frequency); 
+    QueryPerformanceFrequency(&performance_frequency);
 #endif
     return SUCCESS;
 }
@@ -1301,13 +1301,51 @@ zend_string *hp_pcre_replace(zend_string *pattern, zend_string *repl, zval *data
     return replace;
 }
 
+zend_string *hp_trace_callback_wp_hook_apply_filters(zend_string *function_name, zend_execute_data *data)
+{
+	zend_string *trace_name;
+	zval *tag, *current_filter;
+	trace_name = strpprintf(0, "%s", ZSTR_VAL(function_name));
+
+	current_filter = zend_hash_str_find(&EG(symbol_table), "wp_current_filter", 17);
+	if (NULL == current_filter) {
+		return trace_name;
+	}
+
+	if (Z_TYPE_P(current_filter) == IS_INDIRECT) {
+		current_filter = Z_INDIRECT_P(current_filter);
+	}
+
+	ZVAL_DEREF(current_filter);
+
+	if (Z_TYPE_P(current_filter) != IS_ARRAY) {
+		return trace_name;
+	}
+
+	if (zend_hash_num_elements(Z_ARRVAL_P(current_filter)) < 1) {
+		return trace_name;
+	}
+
+	zend_hash_internal_pointer_end(Z_ARRVAL_P(current_filter));
+	tag = zend_hash_get_current_data(Z_ARRVAL_P(current_filter));
+
+	if (Z_TYPE_P(tag) != IS_STRING) {
+		return trace_name;
+	}
+
+	trace_name = strpprintf(0, "%s#%s", ZSTR_VAL(function_name), Z_STRVAL_P(tag));
+	return trace_name;
+}
+
 zend_string *hp_trace_callback_apply_filters(zend_string *function_name, zend_execute_data *data)
 {
 	zend_string *trace_name;
+	trace_name = strpprintf(0, "%s", ZSTR_VAL(function_name));
 	zval *arg = ZEND_CALL_ARG(data, 1);
 	if (Z_TYPE_P(arg) != IS_STRING) {
-		return function_name;
+		return trace_name;
 	}
+
 	trace_name = strpprintf(0, "%s#%s", ZSTR_VAL(function_name), Z_STRVAL_P(arg));
 	return trace_name;
 }
@@ -1509,6 +1547,10 @@ void hp_init_trace_callbacks()
 
     callback = hp_trace_callback_curl_exec;
     register_trace_callback("curl_exec", callback);
+
+    callback = hp_trace_callback_wp_hook_apply_filters;
+    register_trace_callback("WP_Hook::apply_filters", callback);
+    register_trace_callback("WP_Hook::do_action", callback);
 
     callback = hp_trace_callback_apply_filters;
     register_trace_callback("apply_filters", callback);
