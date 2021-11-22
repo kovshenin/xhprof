@@ -1510,6 +1510,24 @@ zend_string *hp_trace_callback_curl_exec(zend_string *symbol, zend_execute_data 
     return result;
 }
 
+zend_string *hp_trace_callback_do_shortcode_tag(zend_string *function_name, zend_execute_data *data)
+{
+	zend_string *trace_name;
+	trace_name = strpprintf(0, "%s", ZSTR_VAL(function_name));
+	zval *arg = ZEND_CALL_ARG(data, 1);
+	if (Z_TYPE_P(arg) != IS_ARRAY) {
+		return trace_name;
+	}
+
+	zval *shortcode_name = zend_hash_index_find(Z_ARRVAL_P(arg), 2);
+	if (shortcode_name == NULL) {
+		return trace_name;
+	}
+
+	trace_name = strpprintf(0, "%s#%s", ZSTR_VAL(function_name), Z_STRVAL_P(shortcode_name));
+	return trace_name;
+}
+
 static inline void hp_free_trace_callbacks(zval *val) {
     efree(Z_PTR_P(val));
 }
@@ -1558,4 +1576,7 @@ void hp_init_trace_callbacks()
 
     callback = hp_trace_callback_closure;
     register_trace_callback("{closure}", callback);
+
+    callback = hp_trace_callback_do_shortcode_tag;
+    register_trace_callback("do_shortcode_tag", callback);
 }
