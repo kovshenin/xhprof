@@ -1574,9 +1574,6 @@ void hp_init_trace_callbacks()
     register_trace_callback("apply_filters", callback);
     register_trace_callback("do_action", callback);
 
-    callback = hp_trace_callback_closure;
-    register_trace_callback("{closure}", callback);
-
     callback = hp_trace_callback_do_shortcode_tag;
     register_trace_callback("do_shortcode_tag", callback);
 }

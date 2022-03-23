@@ -1,6 +1,8 @@
 #ifndef XHPROF_TRACE_H
 #define XHPROF_TRACE_H
 
+zend_string *hp_trace_callback_closure(zend_string *function_name, zend_execute_data *data);
+
 static zend_always_inline void hp_mode_common_beginfn(hp_entry_t **entries, hp_entry_t *current)
 {
     hp_entry_t *p;
@@ -77,8 +79,19 @@ static zend_always_inline zend_string *hp_get_function_name(zend_execute_data *e
 
 static zend_always_inline zend_string *hp_get_trace_callback(zend_string *function_name, zend_execute_data *data)
 {
-    zend_string *trace_name;
+    zend_string *trace_name, *closure;
     hp_trace_callback *callback;
+    zend_long offset = 0;
+
+    offset = ZSTR_LEN(function_name) - 9;
+    closure = zend_string_init(ZSTR_VAL(function_name) + offset, 9, 0);
+    if (zend_string_equals_literal(closure, "{closure}")) {
+	zend_string_release(closure);
+	trace_name = hp_trace_callback_closure(function_name, data);
+	return trace_name;
+    }
+
+    zend_string_release(closure);
 
     if (XHPROF_G(trace_callbacks)) {
         callback = (hp_trace_callback*)zend_hash_find_ptr(XHPROF_G(trace_callbacks), function_name);
