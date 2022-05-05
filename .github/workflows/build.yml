@@ -13,8 +13,11 @@ jobs:
       run: sudo apt install -y php7.4-dev build-essential
     - uses: actions/checkout@v3
     - name: phpize
-      run: cd extension && phpize .
+      run: phpize .
+      working-directory: ./extension
     - name: configure
       run: ./configure
+      working-directory: ./extension
     - name: make
       run: make && make install
+      working-directory: ./extension
