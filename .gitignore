@@ -4,6 +4,7 @@ extension/*
 !extension/php_xhprof.h
 !extension/tests/
 !extension/xhprof.c
+!extension/trace.h
 
 extension/tests/*.sh
 extension/tests/*.exp
