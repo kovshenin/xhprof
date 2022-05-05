@@ -7,19 +7,24 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./extension
-
     steps:
     - name: install deps
       run: sudo apt install -y php7.4-dev build-essential
+
     - uses: actions/checkout@v3
+
     - name: phpize
       run: phpize .
+      working-directory: ./extension
+
     - name: configure
       run: ./configure
+      working-directory: ./extension
+
     - name: make
       run: make
+      working-directory: ./extension
+
     - name: install
       run: sudo make install
+      working-directory: ./extension
