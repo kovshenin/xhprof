@@ -1,0 +1,20 @@
+name: Build
+
+on:
+  push:
+    branches: [ master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: install deps
+      run: sudo apt install -y php7.4-dev build-essential
+    - uses: actions/checkout@v3
+    - name: phpize
+      run: cd extension && phpize .
+    - name: configure
+      run: ./configure
+    - name: make
+      run: make && make install
