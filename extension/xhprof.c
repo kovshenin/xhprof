@@ -25,6 +25,7 @@
 #include "php_xhprof.h"
 #include "zend_extensions.h"
 #include "trace.h"
+#include "ext/standard/php_string.h"
 
 #ifndef ZEND_WIN32
 # include <sys/time.h>
@@ -1528,6 +1529,46 @@ zend_string *hp_trace_callback_do_shortcode_tag(zend_string *function_name, zend
 	return trace_name;
 }
 
+zend_string *hp_trace_callback_redis_ops(zend_string *function_name, zend_execute_data *data)
+{
+    zend_string *trace_name;
+    zval *arg;
+
+    arg = ZEND_CALL_ARG(data, 1);
+
+    if (Z_TYPE_P(arg) != IS_STRING) {
+        return function_name;
+    }
+
+    trace_name = strpprintf(0, "%s#%s", ZSTR_VAL(function_name), Z_STRVAL_P(arg));
+    return trace_name;
+}
+
+zend_string *hp_trace_callback_redis_ops_multi(zend_string *function_name, zend_execute_data *data)
+{
+    zend_string *trace_name;
+    zend_string *glue;
+    zval *arg;
+    zval return_value;
+
+    arg = ZEND_CALL_ARG(data, 1);
+
+    if (Z_TYPE_P(arg) == IS_STRING) {
+	trace_name = strpprintf(0, "%s#%s", ZSTR_VAL(function_name), Z_STRVAL_P(arg));
+        return trace_name;
+    }
+
+    if (Z_TYPE_P(arg) == IS_ARRAY) {
+        glue = zend_string_init(", ", 2, 0);
+        php_implode(glue, arg, &return_value);
+        zend_string_release(glue);
+        trace_name = strpprintf(0, "%s#%s", ZSTR_VAL(function_name), Z_STRVAL_P(&return_value));
+        return trace_name;
+    }
+
+    return zend_string_copy(function_name);
+}
+
 static inline void hp_free_trace_callbacks(zval *val) {
     efree(Z_PTR_P(val));
 }
@@ -1535,6 +1576,7 @@ static inline void hp_free_trace_callbacks(zval *val) {
 void hp_init_trace_callbacks()
 {
     hp_trace_callback callback;
+    hp_trace_callback callback_multi;
 
     if (!XHPROF_G(collect_additional_info)) {
         return;
@@ -1576,4 +1618,83 @@ void hp_init_trace_callbacks()
 
     callback = hp_trace_callback_do_shortcode_tag;
     register_trace_callback("do_shortcode_tag", callback);
+
+    callback = hp_trace_callback_redis_ops;
+    callback_multi = hp_trace_callback_redis_ops_multi;
+
+    register_trace_callback("Redis::get", callback);
+    register_trace_callback("Redis::set", callback);
+    register_trace_callback("Redis::setex", callback);
+    register_trace_callback("Redis::psetex", callback);
+    register_trace_callback("Redis::setnx", callback);
+
+    // Args: key, or [key, key, ...] or key, key, ...
+    // register_trace_callback("Redis::del", callback);
+    // register_trace_callback("Redis::delete", callback);
+    // register_trace_callback("Redis::unlink", callback);
+
+    register_trace_callback("Redis::exists", callback);
+    register_trace_callback("Redis::incr", callback);
+    register_trace_callback("Redis::incrBy", callback);
+    register_trace_callback("Redis::incrByFloat", callback);
+    register_trace_callback("Redis::decr", callback);
+    register_trace_callback("Redis::decrBy", callback);
+
+    // Args: [key, key, ...]
+    register_trace_callback("Redis::mget", callback_multi);
+    register_trace_callback("Redis::getMultiple", callback_multi);
+
+    // Args: [key => value, ...]
+    // register_trace_callback("Redis::mSet", callback);
+    // register_trace_callback("Redis::mSetNx", callback);
+
+    register_trace_callback("Redis::getSet", callback);
+    register_trace_callback("Redis::move", callback);
+
+    // Args: src, dst
+    register_trace_callback("Redis::rename", callback);
+    register_trace_callback("Redis::renameKey", callback);
+    register_trace_callback("Redis::renameNx", callback);
+
+    register_trace_callback("Redis::expire", callback);
+    register_trace_callback("Redis::setTimeout", callback);
+    register_trace_callback("Redis::pexpire", callback);
+    register_trace_callback("Redis::expireAt", callback);
+    register_trace_callback("Redis::pexpireAt", callback);
+
+    register_trace_callback("Redis::keys", callback);
+    register_trace_callback("Redis::getKeys", callback);
+
+    register_trace_callback("Redis::type", callback);
+
+    register_trace_callback("Redis::append", callback);
+    register_trace_callback("Redis::getRange", callback);
+    register_trace_callback("Redis::setRange", callback);
+    register_trace_callback("Redis::strlen", callback);
+    register_trace_callback("Redis::sort", callback);
+    register_trace_callback("Redis::ttl", callback);
+    register_trace_callback("Redis::pttl", callback);
+    register_trace_callback("Redis::persist", callback);
+    register_trace_callback("Redis::dump", callback);
+    register_trace_callback("Redis::restore", callback);
+
+    // Hashes
+    register_trace_callback("Redis::hSet", callback);
+    register_trace_callback("Redis::hSetNx", callback);
+    register_trace_callback("Redis::hGet", callback);
+    register_trace_callback("Redis::hLen", callback);
+    register_trace_callback("Redis::hDel", callback);
+    register_trace_callback("Redis::hKeys", callback);
+    register_trace_callback("Redis::hVals", callback);
+    register_trace_callback("Redis::hGetAll", callback);
+    register_trace_callback("Redis::hExists", callback);
+    register_trace_callback("Redis::hIncrBy", callback);
+    register_trace_callback("Redis::hIncrByFloat", callback);
+    register_trace_callback("Redis::hMset", callback);
+    register_trace_callback("Redis::hMget", callback);
+    register_trace_callback("Redis::hscan", callback);
+    register_trace_callback("Redis::hStrLen", callback);
+
+    // Lists, Sets, Sorted sets, HyperLogLogs, Geo, Streams
+    // Pub/sub, etc. not implemented.
 }
