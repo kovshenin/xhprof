@@ -86,9 +86,9 @@ static zend_always_inline zend_string *hp_get_trace_callback(zend_string *functi
     offset = ZSTR_LEN(function_name) - 9;
     closure = zend_string_init(ZSTR_VAL(function_name) + offset, 9, 0);
     if (zend_string_equals_literal(closure, "{closure}")) {
-	zend_string_release(closure);
-	trace_name = hp_trace_callback_closure(function_name, data);
-	return trace_name;
+        zend_string_release(closure);
+        trace_name = hp_trace_callback_closure(function_name, data);
+        return trace_name;
     }
 
     zend_string_release(closure);
