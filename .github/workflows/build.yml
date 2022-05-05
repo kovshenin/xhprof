@@ -26,5 +26,5 @@ jobs:
       working-directory: ./extension
 
     - name: install
-      run: sudo make install
+      run: make install
       working-directory: ./extension
