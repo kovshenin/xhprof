@@ -6,9 +6,13 @@ on:
 
 jobs:
   build:
+    strategy:
+      matrix:
+        version: [ 7.4, 7.4-zts ]
+
     runs-on: ubuntu-latest
     container:
-      image: php:7.4
+      image: php:${{ matrix.version }}
 
     steps:
     - uses: actions/checkout@v3
