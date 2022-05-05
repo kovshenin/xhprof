@@ -20,4 +20,6 @@ jobs:
     - name: configure
       run: ./configure
     - name: make
-      run: make && make install
+      run: make
+    - name: install
+      run: sudo make install
