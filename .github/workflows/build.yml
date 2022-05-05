@@ -7,12 +7,10 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    steps:
-    - name: install deps
-      uses: shivammathur/setup-php@v2
-      with:
-        php-version: '7.4'
+    container:
+      image: php:7.4
 
+    steps:
     - uses: actions/checkout@v3
 
     - name: phpize
