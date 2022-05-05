@@ -9,7 +9,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: install deps
-      run: sudo apt install -y php7.4-dev build-essential
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: '7.4'
 
     - uses: actions/checkout@v3
 
