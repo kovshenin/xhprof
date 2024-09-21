@@ -1402,7 +1402,7 @@ function displayXHProfReport($xhprof_runs_impl, $url_params, $source,
       if (!empty($wts)) {
         $wts_array  = explode(",", $wts);
       } else {
-        $wts_array = null;
+        $wts_array = array();
       }
       $data = xhprof_aggregate_runs($xhprof_runs_impl,
                                     $runs_array, $wts_array, $source, false);

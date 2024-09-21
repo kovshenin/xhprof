@@ -394,7 +394,7 @@ void hp_ignored_functions_clear(hp_ignored_functions *functions)
     hp_array_del(functions->names);
     functions->names = NULL;
 
-    memset(functions->filter, 0, XHPROF_MAX_IGNORED_FUNCTIONS);
+    memset(functions->filter, 0, sizeof(functions->filter));
     efree(functions);
 }
 
@@ -404,7 +404,7 @@ double get_timebase_conversion()
     mach_timebase_info_data_t info;
     (void) mach_timebase_info(&info);
 
-    return (info.numer / info.denom) * 1000;
+    return info.denom * 1000. / info.numer;
 #endif
 
     return 1.0;
@@ -426,7 +426,6 @@ hp_ignored_functions *hp_ignored_functions_init(zval *values)
 
     if (Z_TYPE_P(values) == IS_ARRAY) {
         HashTable *ht;
-        zend_ulong num_key;
         zend_string *key;
         zval *val;
 
@@ -435,7 +434,7 @@ hp_ignored_functions *hp_ignored_functions_init(zval *values)
 
         names = ecalloc(count + 1, sizeof(zend_string *));
 
-        ZEND_HASH_FOREACH_KEY_VAL(ht, num_key, key, val) {
+        ZEND_HASH_FOREACH_STR_KEY_VAL(ht, key, val) {
             if (!key) {
                 if (Z_TYPE_P(val) == IS_STRING && strcmp(Z_STRVAL_P(val), ROOT_SYMBOL) != 0) {
                     /* do not ignore "main" */
@@ -458,7 +457,7 @@ hp_ignored_functions *hp_ignored_functions_init(zval *values)
     functions = emalloc(sizeof(hp_ignored_functions));
     functions->names = names;
 
-    memset(functions->filter, 0, XHPROF_MAX_IGNORED_FUNCTIONS);
+    memset(functions->filter, 0, sizeof(functions->filter));
 
     uint32_t i = 0;
     for (; names[i] != NULL; i++) {
@@ -527,6 +526,7 @@ void hp_clean_profiler_state()
 
     if (XHPROF_G(root)) {
         zend_string_release(XHPROF_G(root));
+        XHPROF_G(root) = NULL;
     }
 
     /* Delete the array storing ignored function names */
@@ -996,11 +996,23 @@ void hp_mode_sampled_endfn_cb(hp_entry_t **entries)
 
 #if PHP_VERSION_ID >= 80000
 static void tracer_observer_begin(zend_execute_data *execute_data) {
+#if PHP_VERSION_ID >= 80200
+    if (execute_data->func->type == ZEND_INTERNAL_FUNCTION) {
+        return;
+    }
+#endif
+
     begin_profiling(NULL, execute_data);
 }
 
-static void tracer_observer_end(zend_execute_data *ex, zval *return_value) {
+static void tracer_observer_end(zend_execute_data *execute_data, zval *return_value) {
     if (XHPROF_G(entries)) {
+#if PHP_VERSION_ID >= 80200
+        if (execute_data->func->type == ZEND_INTERNAL_FUNCTION) {
+            return;
+        }
+#endif
+
         end_profiling();
     }
 }
@@ -1070,7 +1082,6 @@ ZEND_DLEXPORT void hp_execute_internal(zend_execute_data *execute_data, zval *re
     if (is_profiling == 1 && XHPROF_G(entries)) {
         end_profiling();
     }
-
 }
 
 /**
@@ -1115,6 +1126,8 @@ ZEND_DLEXPORT zend_op_array* hp_compile_file(zend_file_handle *file_handle, int 
  */
 #if PHP_VERSION_ID < 80000
 ZEND_DLEXPORT zend_op_array* hp_compile_string(zval *source_string, char *filename)
+#elif PHP_VERSION_ID >= 80200
+ZEND_DLEXPORT zend_op_array* hp_compile_string(zend_string *source_string, const char *filename, zend_compile_position position)
 #else
 ZEND_DLEXPORT zend_op_array* hp_compile_string(zend_string *source_string, const char *filename)
 #endif
@@ -1122,7 +1135,11 @@ ZEND_DLEXPORT zend_op_array* hp_compile_string(zend_string *source_string, const
     int is_profiling = 1;
 
     if (!XHPROF_G(enabled)) {
+#if PHP_VERSION_ID >= 80200
+        return _zend_compile_string(source_string, filename, position);
+#else
         return _zend_compile_string(source_string, filename);
+#endif
     }
 
     zend_string *function_name;
@@ -1131,7 +1148,11 @@ ZEND_DLEXPORT zend_op_array* hp_compile_string(zend_string *source_string, const
     function_name = strpprintf(0, "eval::%s", filename);
 
     is_profiling = begin_profiling(function_name, NULL);
+#if PHP_VERSION_ID >= 80200
+    op_array = _zend_compile_string(source_string, filename, position);
+#else
     op_array = _zend_compile_string(source_string, filename);
+#endif
 
     if (is_profiling == 1 && XHPROF_G(entries)) {
         end_profiling();
@@ -1223,6 +1244,11 @@ static void hp_stop()
 
     /* Stop profiling */
     XHPROF_G(enabled) = 0;
+
+    if (XHPROF_G(root)) {
+        zend_string_release(XHPROF_G(root));
+        XHPROF_G(root) = NULL;
+    }
 }
 
 
@@ -1239,6 +1265,7 @@ static inline void hp_array_del(zend_string **names)
         int i = 0;
         for (; names[i] != NULL && i < XHPROF_MAX_IGNORED_FUNCTIONS; i++) {
             zend_string_release(names[i]);
+            names[i] = NULL;
         }
 
         efree(names);
@@ -1247,7 +1274,6 @@ static inline void hp_array_del(zend_string **names)
 
 int hp_pcre_match(zend_string *pattern, const char *str, size_t len, zend_ulong idx)
 {
-    zval *match;
     pcre_cache_entry *pce_regexp;
 
     if ((pce_regexp = pcre_get_compiled_regex_cache(pattern)) == NULL) {
@@ -1263,7 +1289,13 @@ int hp_pcre_match(zend_string *pattern, const char *str, size_t len, zend_ulong 
 #else
         zend_string *tmp = zend_string_init(str, len, 0);
         php_pcre_match_impl(pce_regexp, tmp, &matches, &subparts /* subpats */,
-                            0/* global */, 0/* ZEND_NUM_ARGS() >= 4 */, 0/*flags PREG_OFFSET_CAPTURE*/, 0/* start_offset */);
+#if PHP_VERSION_ID < 80400
+                            0/* global */,
+                            0/* ZEND_NUM_ARGS() >= 4 */,
+#else
+                            false/* global */,
+#endif
+                            0/*flags PREG_OFFSET_CAPTURE*/, 0/* start_offset */);
         zend_string_release(tmp);
 #endif
 
@@ -1384,16 +1416,16 @@ zend_string *hp_trace_callback_sql_query(zend_string *function_name, zend_execut
 
 zend_string *hp_trace_callback_pdo_statement_execute(zend_string *symbol, zend_execute_data *data)
 {
-    zend_string *result, *pattern;
-    zend_class_entry *pdo_ce;
+    zend_string *result = NULL;
+    zend_string *pattern = NULL;
     zval *object = (data->This.value.obj) ? &(data->This) : NULL;
     zval *query_string, *arg;
 
     if (object != NULL) {
 #if PHP_VERSION_ID < 80000
-        query_string = zend_read_property(pdo_ce, object, "queryString", sizeof("queryString") - 1, 0, NULL);
+        query_string = zend_read_property(NULL, object, "queryString", sizeof("queryString") - 1, 0, NULL);
 #else
-        query_string = zend_read_property(pdo_ce, Z_OBJ_P(object), "queryString", sizeof("queryString") - 1, 0, NULL);
+        query_string = zend_read_property(NULL, Z_OBJ_P(object), "queryString", sizeof("queryString") - 1, 0, NULL);
 #endif
 
         if (query_string == NULL || Z_TYPE_P(query_string) != IS_STRING) {

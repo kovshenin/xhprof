@@ -174,7 +174,7 @@ static zend_always_inline int begin_profiling(zend_string *root_symbol, zend_exe
     } else {
 #if PHP_VERSION_ID >= 80000
         hp_entry_t *cur_entry = hp_fast_alloc_hprof_entry();
-        (cur_entry)->name_hprof = (*(entries))->name_hprof;
+        (cur_entry)->name_hprof = zend_string_copy((*(entries))->name_hprof);
         (cur_entry)->prev_hprof = (*(entries));
         (cur_entry)->is_trace = 0;
         (*(entries)) = (cur_entry);
